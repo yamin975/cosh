@@ -360,14 +360,25 @@ app.get('/tent/:tentId', (req, res) => {
   textarea::placeholder { color: #7c7c86; }
 
   .send-btn {
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    border: none;
+    /* Fixed red/black gradient - intentionally NOT theme-driven, so the
+       Share button always looks the same regardless of which Tent theme
+       gets randomly generated. */
+    background: linear-gradient(135deg, #ff3b3b 0%, #8a0000 55%, #1a0000 100%);
+    border: 1px solid rgba(255,80,80,0.5);
     padding: 0 26px;
     font-weight: 700;
-    color: #111;
+    color: #fff;
     font-size: 14px;
-  }
-  .send-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    box-shadow: 0 4px 14px rgba(180,0,0,0.35);
+}
+.send-btn:hover {
+    filter: brightness(1.12);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(180,0,0,0.5);
+}
+.send-btn:active { transform: translateY(0); filter: brightness(0.95); }
+
 
   /* Stack the compose bar on small screens instead of squeezing it sideways. */
   @media (max-width: 640px) {
