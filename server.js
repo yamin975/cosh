@@ -8,12 +8,17 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 // In-memory data store for rooms
-// Stores: { messages: [], lastActive: timestamp }
 const database = {};
 
 app.get('/', (req, res) => {
     const randomRoomId = crypto.randomBytes(4).toString('hex');
     res.redirect(`/room/${randomRoomId}`);
+});
+
+// Endpoint that the button calls to fetch a new random room ID
+app.get('/api/new-room', (req, res) => {
+    const randomRoomId = crypto.randomBytes(4).toString('hex');
+    res.json({ roomId: randomRoomId });
 });
 
 app.get('/room/:roomId', (req, res) => {
@@ -24,13 +29,14 @@ app.get('/room/:roomId', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Cosh - Hut ${roomId}</title>
+        <title>Code Chat - Room ${roomId}</title>
         <style>
             * { box-sizing: border-box; }
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #121212; color: #e0e0e0; margin: 0; padding: 20px; display: flex; flex-direction: column; height: 100vh; }
             header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #2d2d2d; }
             h2 { color: #4fc1ff; margin: 0; font-family: monospace; }
             .share-url { font-size: 12px; color: #858585; margin-top: 4px; }
+            .header-actions { display: flex; align-items: center; gap: 15px; }
             #chat-window { flex: 1; overflow-y: auto; margin: 20px 0; display: flex; flex-direction: column; gap: 15px; padding-right: 5px; }
             .msg-card { background: #1e1e1e; border: 1px solid #333; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 8px; position: relative; }
             .msg-meta { font-size: 11px; color: #858585; display: flex; justify-content: space-between; }
@@ -38,8 +44,10 @@ app.get('/room/:roomId', (req, res) => {
             .msg-actions { display: flex; gap: 10px; align-items: center; }
             button { background: #2d2d2d; color: #fff; border: 1px solid #444; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; }
             button:hover { background: #3d3d3d; }
+            .create-room-btn { background: #333333; border-color: #555; color: #ffb74d; font-weight: 500; padding: 8px 12px; }
+            .create-room-btn:hover { background: #444444; }
             .upvote-btn { border-color: #388e3c; color: #81c784; }
-            .upvote-btn:hover { background: #ebf3eb; }
+            .upvote-btn:hover { background: #1b5e20; }
             .copy-btn { border-color: #0288d1; color: #29b6f6; }
             .copy-btn:hover { background: #01579b; }
             .input-area { display: flex; gap: 10px; min-height: 80px; }
@@ -52,16 +60,19 @@ app.get('/room/:roomId', (req, res) => {
     <body>
         <header>
             <div>
-                <h2>Hut: ${roomId}</h2>
+                <h2>Room: ${roomId}</h2>
                 <div class="share-url">Share Link: <span id="urlText" style="color:#fff"></span></div>
             </div>
-            <div id="status" style="color: #6a9955; font-size: 18px;">Connected</div>
+            <div class="header-actions">
+                <button class="create-room-btn" id="createRoomBtn">➕ Create New Room</button>
+                <div id="status" style="color: #6a9955; font-size: 12px;">Connected</div>
+            </div>
         </header>
         
         <div id="chat-window"></div>
 
         <div class="input-area">
-            <textarea id="codeInput" placeholder=" Your code "></textarea>
+            <textarea id="codeInput" placeholder="Paste your working code snippet here... Enter to send."></textarea>
             <button class="send-btn" id="sendBtn">Share</button>
         </div>
 
@@ -72,6 +83,7 @@ app.get('/room/:roomId', (req, res) => {
             const chatWindow = document.getElementById('chat-window');
             const codeInput = document.getElementById('codeInput');
             const sendBtn = document.getElementById('sendBtn');
+            const createRoomBtn = document.getElementById('createRoomBtn');
             
             document.getElementById('urlText').innerText = window.location.href;
 
@@ -108,6 +120,17 @@ app.get('/room/:roomId', (req, res) => {
                 }
             });
 
+            // Explicitly handles requesting a fresh room link and opens it in a new tab
+            createRoomBtn.addEventListener('click', () => {
+                fetch('/api/new-room')
+                    .then(response => response.json())
+                    .then(data => {
+                        const newUrl = window.location.origin + '/room/' + data.roomId;
+                        window.open(newUrl, '_blank');
+                    })
+                    .catch(err => console.error('Error spawning new room:', err));
+            });
+
             function renderMessage(msg) {
                 const existing = document.getElementById('msg-' + msg.id);
                 if (existing) existing.remove();
@@ -123,7 +146,7 @@ app.get('/room/:roomId', (req, res) => {
                     <div class="msg-body" id="body-\${msg.id}">\${escapeHTML(msg.code)}</div>
                     <div class="msg-actions">
                         <button class="upvote-btn" onclick="upvote('\${msg.id}')">
-                            👍 Working (<span id="votes-\${msg.id}">\${msg.upvotes}</span>)
+                            👍 Worked (<span id="votes-\${msg.id}">\${msg.upvotes}</span>)
                         </button>
                         <button class="copy-btn" onclick="copyCode('\${msg.id}')">📋 Copy Code</button>
                     </div>
@@ -138,7 +161,7 @@ app.get('/room/:roomId', (req, res) => {
             function copyCode(msgId) {
                 const text = document.getElementById('body-' + msgId).innerText;
                 navigator.clipboard.writeText(text).then(() => {
-                    alert('Copied');
+                    alert('Code copied to clipboard!');
                 });
             }
 
@@ -163,15 +186,12 @@ app.get('/room/:roomId', (req, res) => {
 io.on('connection', (socket) => {
     socket.on('join-room', (roomId) => {
         socket.join(roomId);
-        
-        // Initialize room if it doesn't exist
         if (!database[roomId]) {
             database[roomId] = {
                 messages: [],
                 lastActive: Date.now()
             };
         }
-        
         socket.emit('room-history', database[roomId].messages);
     });
 
@@ -183,10 +203,9 @@ io.on('connection', (socket) => {
             time: timestamp,
             upvotes: 0
         };
-        
         if (database[data.roomId]) {
             database[data.roomId].messages.push(newMsg);
-            database[data.roomId].lastActive = Date.now(); // Mark room active
+            database[data.roomId].lastActive = Date.now();
             io.to(data.roomId).emit('new-message', newMsg);
         }
     });
@@ -197,29 +216,10 @@ io.on('connection', (socket) => {
             const targetMsg = roomMsgs.find(m => m.id === data.msgId);
             if (targetMsg) {
                 targetMsg.upvotes += 1;
-                database[data.roomId].lastActive = Date.now(); // Mark room active
+                database[data.roomId].lastActive = Date.now();
                 io.to(data.roomId).emit('update-upvotes', { msgId: targetMsg.id, upvotes: targetMsg.upvotes });
             }
         }
     });
 });
 
-// SAFETY CRON: Automatically runs every 30 minutes to clean dead data
-const CLEANUP_INTERVAL = 30 * 60 * 1000; // 30 minutes in milliseconds
-const MAX_INACTIVE_TIME = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
-
-setInterval(() => {
-    const now = Date.now();
-    for (const roomId in database) {
-        if (now - database[roomId].lastActive > MAX_INACTIVE_TIME) {
-            delete database[roomId]; 
-            console.log(`[Safety Cleanup] Room ${roomId} was deleted due to inactivity.`);
-        }
-    }
-}, CLEANUP_INTERVAL);
-
-// Start the server
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Chat application running on port ${PORT}`);
-});
