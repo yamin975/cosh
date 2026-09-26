@@ -157,6 +157,13 @@ app.get('/api/new-tent', (req, res) => {
     res.json({ tentId: randomTentId });
 });
 
+// Backward compatibility: anyone with an old "/room/:id" link (from before
+// the Room -> Tent rename) gets redirected to the equivalent "/tent/:id"
+// URL instead of hitting a 404.
+app.get('/room/:tentId', (req, res) => {
+    res.redirect('/tent/' + req.params.tentId);
+});
+
 // Main page: renders the whole chat UI as one self-contained HTML document,
 // with the theme baked in as CSS variables computed server-side from the
 // tentId. Because the theme is computed here (not in the browser), everyone
