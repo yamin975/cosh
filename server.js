@@ -123,20 +123,34 @@ function buttonRadiusCss(theme) {
     return theme.radius + 'px';                         // 'rounded' reuses the card radius
 }
 
-// Builds a subtle CSS background pattern (dots / grid / diagonal stripes / none)
-// tinted with the theme's accent color at low opacity, so it reads as texture
-// rather than noise.
-function patternCss(theme) {
+// Builds the two pieces (image + matching size) needed to layer a subtle
+// pattern *on top of* the background gradient, rather than replacing it.
+// Returns arrays so the caller can prepend/append the gradient layer and
+// keep the background-image/background-size lists in sync (each layer in
+// background-image needs a matching entry in background-size).
+function patternLayer(theme) {
     const c = `hsla(${theme.hue}, ${theme.sat}%, 65%, 0.06)`;
     switch (theme.pattern) {
         case 'dots':
-            return `background-image: radial-gradient(${c} 1.5px, transparent 1.5px); background-size: 22px 22px;`;
+            return {
+                images: [`radial-gradient(${c} 1.5px, transparent 1.5px)`],
+                sizes: ['22px 22px']
+            };
         case 'grid':
-            return `background-image: linear-gradient(${c} 1px, transparent 1px), linear-gradient(90deg, ${c} 1px, transparent 1px); background-size: 32px 32px;`;
+            return {
+                images: [
+                    `linear-gradient(${c} 1px, transparent 1px)`,
+                    `linear-gradient(90deg, ${c} 1px, transparent 1px)`
+                ],
+                sizes: ['32px 32px', '32px 32px']
+            };
         case 'diagonal':
-            return `background-image: repeating-linear-gradient(45deg, ${c} 0, ${c} 1px, transparent 1px, transparent 14px);`;
+            return {
+                images: [`repeating-linear-gradient(45deg, ${c} 0, ${c} 1px, transparent 1px, transparent 14px)`],
+                sizes: ['auto']
+            };
         default:
-            return ''; // 'none' - plain gradient background, no overlay
+            return { images: [], sizes: [] }; // 'none' - no extra layer
     }
 }
 
@@ -172,12 +186,20 @@ app.get('/tent/:tentId', (req, res) => {
     const tentId = req.params.tentId;
     const theme = generateTheme(tentId);
 
+    // Combine the pattern layer (if any) with the base gradient into single
+    // background-image / background-size lists. The pattern images (if
+    // present) come FIRST so they render on top of the gradient beneath them.
+    const pattern = patternLayer(theme);
+    const gradientImage = `linear-gradient(${theme.angle}deg, var(--bg-deep), var(--bg-deep2), var(--bg-deep))`;
+    const bgImages = [...pattern.images, gradientImage].join(', ');
+    const bgSizes = [...pattern.sizes, '200% 200%'].join(', ');
+
     const html = `<!DOCTYPE html>
 <html lang="en" data-theme-pattern="${theme.pattern}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Code Tent - ${tentId}</title>
+<title>Cosh Tent - ${tentId}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="${fontUrl(theme)}" rel="stylesheet">
@@ -208,11 +230,16 @@ app.get('/tent/:tentId', (req, res) => {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    /* Slowly drifting gradient background, using the two theme hues. */
-    background: linear-gradient(${theme.angle}deg, var(--bg-deep), var(--bg-deep2), var(--bg-deep));
-    background-size: 200% 200%;
+    /* Explicit dark fallback color - guarantees the page is never white,
+       even for a split second before the gradient below paints. */
+    background-color: var(--bg-deep);
+    /* Layered background: the pattern texture (if any) sits on top of the
+       slowly drifting gradient underneath it. Both live in the SAME
+       background-image/background-size declarations so the pattern can
+       never accidentally replace the gradient. */
+    background-image: ${bgImages};
+    background-size: ${bgSizes};
     animation: driftBg 22s ease-in-out infinite;
-    ${patternCss(theme)}
   }
   @keyframes driftBg {
     0% { background-position: 0% 50%; }
@@ -360,7 +387,7 @@ app.get('/tent/:tentId', (req, res) => {
       </div>
     </div>
     <div class="header-actions">
-      <button class="new-tent-btn" id="newTentBtn">+ Pitch New Tent</button>
+      <button class="new-tent-btn" id="newTentBtn">+New Tent</button>
       <div id="status">Connected</div>
     </div>
   </header>
@@ -368,7 +395,7 @@ app.get('/tent/:tentId', (req, res) => {
   <div id="chat-window"></div>
 
   <div class="input-area">
-    <textarea id="codeInput" placeholder="Paste your working code snippet here... Enter to send."></textarea>
+    <textarea id="codeInput" placeholder="Your Code"></textarea>
     <button class="send-btn" id="sendBtn">Share</button>
   </div>
 
