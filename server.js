@@ -120,7 +120,6 @@ app.get('/room/:roomId', (req, res) => {
                 }
             });
 
-            // Explicitly handles requesting a fresh room link and opens it in a new tab
             createRoomBtn.addEventListener('click', () => {
                 fetch('/api/new-room')
                     .then(response => response.json())
@@ -135,7 +134,6 @@ app.get('/room/:roomId', (req, res) => {
                 const existing = document.getElementById('msg-' + msg.id);
                 if (existing) existing.remove();
 
-                // Computes timestamp inside client browser timezone configuration
                 const localTimeStr = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
                 const card = document.createElement('div');
@@ -186,6 +184,7 @@ app.get('/room/:roomId', (req, res) => {
     `);
 });
 
+// Setup real-time listeners for classroom sockets
 io.on('connection', (socket) => {
     socket.on('join-room', (roomId) => {
         socket.join(roomId);
@@ -202,7 +201,7 @@ io.on('connection', (socket) => {
         const newMsg = {
             id: crypto.randomBytes(6).toString('hex'),
             code: data.code,
-            timestamp: Date.now(), // Stores exact raw numerical time instead of pre-formatted string
+            timestamp: Date.now(),
             upvotes: 0
         };
         if (database[data.roomId]) {
@@ -218,3 +217,10 @@ io.on('connection', (socket) => {
             const targetMsg = roomMsgs.find(m => m.id === data.msgId);
             if (targetMsg) {
                 targetMsg.upvotes += 1;
+                database[data.roomId].lastActive = Date.now();
+                io.to(data.roomId).emit('update-upvotes', { msgId: targetMsg.id, upvotes: targetMsg.upvotes });
+            }
+        }
+    });
+});
+
