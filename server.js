@@ -24,7 +24,7 @@ app.get('/room/:roomId', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Code Chat - Room ${roomId}</title>
+        <title>Cosh - Hut ${roomId}</title>
         <style>
             * { box-sizing: border-box; }
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #121212; color: #e0e0e0; margin: 0; padding: 20px; display: flex; flex-direction: column; height: 100vh; }
@@ -39,7 +39,7 @@ app.get('/room/:roomId', (req, res) => {
             button { background: #2d2d2d; color: #fff; border: 1px solid #444; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; }
             button:hover { background: #3d3d3d; }
             .upvote-btn { border-color: #388e3c; color: #81c784; }
-            .upvote-btn:hover { background: #1b5e20; }
+            .upvote-btn:hover { background: #ebf3eb; }
             .copy-btn { border-color: #0288d1; color: #29b6f6; }
             .copy-btn:hover { background: #01579b; }
             .input-area { display: flex; gap: 10px; min-height: 80px; }
@@ -52,16 +52,16 @@ app.get('/room/:roomId', (req, res) => {
     <body>
         <header>
             <div>
-                <h2>Room: ${roomId}</h2>
+                <h2>Hut: ${roomId}</h2>
                 <div class="share-url">Share Link: <span id="urlText" style="color:#fff"></span></div>
             </div>
-            <div id="status" style="color: #6a9955; font-size: 12px;">Connected</div>
+            <div id="status" style="color: #6a9955; font-size: 18px;">Connected</div>
         </header>
         
         <div id="chat-window"></div>
 
         <div class="input-area">
-            <textarea id="codeInput" placeholder="Paste your working code snippet here... Enter to send."></textarea>
+            <textarea id="codeInput" placeholder=" Your code "></textarea>
             <button class="send-btn" id="sendBtn">Share</button>
         </div>
 
@@ -123,7 +123,7 @@ app.get('/room/:roomId', (req, res) => {
                     <div class="msg-body" id="body-\${msg.id}">\${escapeHTML(msg.code)}</div>
                     <div class="msg-actions">
                         <button class="upvote-btn" onclick="upvote('\${msg.id}')">
-                            👍 Worked (<span id="votes-\${msg.id}">\${msg.upvotes}</span>)
+                            👍 Working (<span id="votes-\${msg.id}">\${msg.upvotes}</span>)
                         </button>
                         <button class="copy-btn" onclick="copyCode('\${msg.id}')">📋 Copy Code</button>
                     </div>
@@ -138,7 +138,7 @@ app.get('/room/:roomId', (req, res) => {
             function copyCode(msgId) {
                 const text = document.getElementById('body-' + msgId).innerText;
                 navigator.clipboard.writeText(text).then(() => {
-                    alert('Code copied to clipboard!');
+                    alert('Copied');
                 });
             }
 
