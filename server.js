@@ -250,13 +250,214 @@ function patternLayer(theme) {
 //   req = the incoming request (URL details, etc.)
 //   res = the response we send back
 
-// Main address ("/"): create a fresh random Tent and send the visitor there.
+// Tent IDs are now typed in by people (not just clicked from a generated
+// link), so we validate them: letters, digits, underscore, hyphen only,
+// 1-32 characters long. This also closes a security gap - without this
+// check, a crafted ID could break out of the quotes/tags it gets inserted
+// into on the Tent page and inject arbitrary HTML/JavaScript.
+function isValidTentId(id) {
+    return /^[a-zA-Z0-9_-]{1,32}$/.test(id);
+}
+
+// A small standalone page shown when someone requests an invalid Tent ID
+// (either typed wrong on the landing page, or a malformed/malicious link).
+// Deliberately plain and self-contained - it does not depend on a theme,
+// since we may not want to trust/echo back whatever bad input caused it.
+function invalidTentIdPage() {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Invalid Tent ID</title>
+<style>
+  body { background:#121212; color:#e0e0e0; font-family: -apple-system, sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0; text-align:center; padding:20px; }
+  h2 { color:#ff6b6b; }
+  a { color:#4fc1ff; }
+</style>
+</head>
+<body>
+  <h2>&#9978; Invalid Tent ID</h2>
+  <p>Tent IDs can only contain letters, numbers, underscores, and hyphens (1-32 characters).</p>
+  <p><a href="/">&larr; Back to Code Tent</a></p>
+</body>
+</html>`;
+}
+
+// Main address ("/"): a landing page where people can either start a brand
+// new Tent, or type in the ID of an existing Tent to join it.
 app.get('/', (req, res) => {
-    // randomBytes(4) = 4 random bytes; toString('hex') writes them as 8
-    // characters (0-9, a-f), e.g. "a1b2c3d4". That gives about 4 billion
-    // possible IDs, so guessing someone else's Tent is unlikely.
-    const randomTentId = crypto.randomBytes(4).toString('hex');
-    res.redirect('/tent/' + randomTentId);
+    // Reuse the theme engine with a fixed seed string, so the landing page
+    // still gets a nice generated look, but the SAME look every time
+    // (rather than changing on every visit, which would feel inconsistent
+    // for a page that is not tied to any one Tent).
+    const theme = generateTheme('__landing__');
+    const pattern = patternLayer(theme);
+    const gradientImage = `linear-gradient(${theme.angle}deg, var(--bg-deep), var(--bg-deep2), var(--bg-deep))`;
+    const bgImages = [...pattern.images, gradientImage].join(', ');
+    const bgSizes = [...pattern.sizes, '200% 200%'].join(', ');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Code Tent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="${fontUrl(theme)}" rel="stylesheet">
+<style>
+  :root {
+    --accent: hsl(${theme.hue}, ${theme.sat}%, ${theme.accentLight}%);
+    --accent2: hsl(${theme.hue2}, ${theme.sat}%, ${theme.accentLight}%);
+    --accent-soft: hsla(${theme.hue}, ${theme.sat}%, ${theme.accentLight}%, 0.15);
+    --bg-deep: hsl(${theme.hue}, 35%, 6%);
+    --bg-deep2: hsl(${theme.hue2}, 30%, 9%);
+    --radius: ${theme.radius}px;
+    --btn-radius: ${buttonRadiusCss(theme)};
+    --font-head: '${theme.headingFont}', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: '${theme.monoFont}', 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--font-head);
+    color: #e8e8ea;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+    background-color: var(--bg-deep);
+    background-image: ${bgImages};
+    background-size: ${bgSizes};
+    animation: driftBg 22s ease-in-out infinite;
+  }
+  @keyframes driftBg {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .landing-card {
+    width: 100%;
+    max-width: 420px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius);
+    padding: 32px 28px;
+    backdrop-filter: blur(6px);
+    text-align: center;
+  }
+  .landing-emoji { font-size: 40px; filter: drop-shadow(0 0 8px var(--accent-soft)); }
+  h1 {
+    font-family: var(--font-mono);
+    color: var(--accent);
+    font-size: 26px;
+    margin: 10px 0 4px;
+  }
+  .tagline { color: #9a9aa2; font-size: 13px; margin: 0 0 26px; }
+  .divider { display: flex; align-items: center; gap: 10px; margin: 22px 0; color: #6b6b73; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.1); }
+  input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    outline: none;
+    text-align: center;
+    letter-spacing: 0.5px;
+    transition: border-color 0.15s ease;
+  }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  input::placeholder { color: #7c7c86; letter-spacing: normal; }
+  button {
+    width: 100%;
+    margin-top: 10px;
+    background: rgba(255,255,255,0.04);
+    color: #f0f0f2;
+    border: 1px solid var(--accent-soft);
+    padding: 12px;
+    border-radius: var(--btn-radius);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: var(--font-head);
+    transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  button:hover { background: var(--accent-soft); border-color: var(--accent); transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  .create-btn {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #111;
+    border: none;
+    font-weight: 700;
+  }
+  .create-btn:hover { filter: brightness(1.08); }
+  .error-text { color: #ff8080; font-size: 12px; margin: 8px 0 0; min-height: 14px; }
+</style>
+</head>
+<body>
+  <div class="landing-card">
+    <div class="landing-emoji">&#9978;</div>
+    <h1>Code Tent</h1>
+    <p class="tagline">Realtime code sharing, one link at a time.</p>
+
+    <button class="create-btn" id="createBtn">+ Start a New Tent</button>
+
+    <div class="divider">or</div>
+
+    <input id="joinInput" type="text" placeholder="Enter Tent ID" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button id="joinBtn">Join Tent</button>
+    <p class="error-text" id="errorText"></p>
+  </div>
+
+  <script>
+    const createBtn = document.getElementById('createBtn');
+    const joinBtn = document.getElementById('joinBtn');
+    const joinInput = document.getElementById('joinInput');
+    const errorText = document.getElementById('errorText');
+
+    // Same character rule as the server (letters, digits, underscore,
+    // hyphen). Checking it here too just gives instant feedback without
+    // waiting on a round trip - the server re-checks it regardless.
+    const VALID_ID = /^[a-zA-Z0-9_-]{1,32}$/;
+
+    createBtn.addEventListener('click', function () {
+      fetch('/api/new-tent')
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          window.location.href = '/tent/' + data.tentId;
+        });
+    });
+
+    function joinTent() {
+      const id = joinInput.value.trim();
+      if (!id) {
+        errorText.textContent = 'Enter a Tent ID first.';
+        return;
+      }
+      if (!VALID_ID.test(id)) {
+        errorText.textContent = 'Only letters, numbers, - and _ are allowed.';
+        return;
+      }
+      window.location.href = '/tent/' + id;
+    }
+
+    joinBtn.addEventListener('click', joinTent);
+    joinInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') joinTent();
+    });
+  </script>
+</body>
+</html>`;
+
+    res.send(html);
 });
 
 // Used by the "+New Tent" button. The browser calls this to get a fresh ID,
@@ -277,6 +478,14 @@ app.get('/room/:tentId', (req, res) => {
 // Example: visiting /tent/abc123 makes req.params.tentId equal "abc123".
 app.get('/tent/:tentId', (req, res) => {
     const tentId = req.params.tentId;
+
+    // Reject anything that is not a plain, expected-shape ID BEFORE it gets
+    // anywhere near the page template. This is what actually makes typed-in
+    // Tent IDs safe: no matter what someone enters (or links to), only
+    // letters/digits/underscore/hyphen can ever reach the HTML below.
+    if (!isValidTentId(tentId)) {
+        return res.status(400).send(invalidTentIdPage());
+    }
 
     // Work out this Tent's look (same ID -> same result every time).
     const theme = generateTheme(tentId);
@@ -417,6 +626,24 @@ app.get('/tent/:tentId', (req, res) => {
   button:active { transform: translateY(0); }                                                              /* presses back down on click */
 
   .new-tent-btn { color: var(--accent2); border-color: var(--accent2); }
+
+  /* Styled to match the other header buttons even though it is a plain
+     <a> link, not a <button> element (so it needs its own box/border/etc
+     instead of inheriting the shared "button {...}" rule above). */
+  .home-link {
+    color: #c9c9d1;
+    border: 1px solid var(--accent-soft);
+    padding: 8px 14px;
+    border-radius: var(--btn-radius);
+    font-size: 13px;
+    font-family: var(--font-head);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  .home-link:hover { background: var(--accent-soft); border-color: var(--accent); transform: translateY(-1px); }
 
   /* ---------------- CHAT AREA ---------------- */
   /* The scrollable list where message cards appear. */
@@ -611,6 +838,7 @@ app.get('/tent/:tentId', (req, res) => {
       </div>
     </div>
     <div class="header-actions">
+      <a class="home-link" href="/" title="Create or join another Tent">&#8962; Tents</a>
       <button class="new-tent-btn" id="newTentBtn">+New Tent</button>
       <!-- Text and color of this element change when the connection drops. -->
       <div id="status">Connected</div>
