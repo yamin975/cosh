@@ -620,10 +620,16 @@ app.get('/tent/:tentId', (req, res) => {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease; /* smooth hover changes */
+    /* A single "Material-standard" easing curve (fast start, gentle
+       settle) used consistently across the whole UI - this is a big part
+       of why polished apps feel cohesive: every small motion shares the
+       same "personality" instead of each using its own timing. */
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+                background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   }
   button:hover { background: var(--accent-soft); border-color: var(--accent); transform: translateY(-1px); } /* lifts 1px on hover */
-  button:active { transform: translateY(0); }                                                              /* presses back down on click */
+  button:active { transform: translateY(0) scale(0.97); }   /* quick, subtle press - no bounce, just a tap acknowledgment */
 
   .new-tent-btn { color: var(--accent2); border-color: var(--accent2); }
 
@@ -670,21 +676,15 @@ app.get('/tent/:tentId', (req, res) => {
     flex-direction: column;
     gap: 10px;
     backdrop-filter: blur(6px);             /* blurs whatever is behind the card (frosted glass) */
-    /* Two animations run together on arrival: cardEnter (slide/scale/fade
-       in) and cardGlow (a soft accent-colored ring that blooms outward and
-       fades) - together this reads as "new message just landed", not just
-       a plain fade. */
-    animation: cardEnter 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-               cardGlow 1.1s ease-out;
+    /* Short, quick arrival - close to how Telegram/Snapchat messages pop
+       in: a small slide + fade with NO overshoot or bounce, done in well
+       under a quarter second so it reads as "instant but smooth" rather
+       than as a noticeable effect you sit and watch. */
+    animation: cardEnter 0.22s cubic-bezier(0.22, 1, 0.36, 1);
   }
   @keyframes cardEnter {
-    0%   { opacity: 0; transform: translateY(14px) scale(0.97); }
+    0%   { opacity: 0; transform: translateY(8px) scale(0.985); }
     100% { opacity: 1; transform: translateY(0) scale(1); }
-  }
-  @keyframes cardGlow {
-    0%   { box-shadow: 0 0 0 0 var(--accent-soft), 0 0 0 0 rgba(0,0,0,0); }
-    35%  { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 24px 2px var(--accent-soft); }
-    100% { box-shadow: 0 0 0 0 rgba(0,0,0,0), 0 0 0 0 rgba(0,0,0,0); }
   }
   .msg-meta { font-size: 11px; color: #8f8f98; display: flex; justify-content: space-between; }
 
@@ -706,20 +706,27 @@ app.get('/tent/:tentId', (req, res) => {
   .copy-btn { border-color: rgba(120,170,220,0.4); color: #a9cdf0; }     /* blue: copy */
   .copy-btn:hover { background: rgba(120,170,220,0.15); }
 
-  /* Momentary "copied" state: the button flips to a green checkmark and
-     briefly pops in size, then settles back to normal before reverting to
-     its default label (handled by adding/removing this class in JS). */
+  /* Momentary "copied" state: color/border smoothly TRANSITION to green
+     (no keyframe pop, no scale bump) - just a quick, quiet color change,
+     the same kind of feedback you get tapping a reaction in Telegram. The
+     label text itself crossfades via .btn-label below, controlled from JS. */
   .copy-btn.copied {
     color: #a3e6b5;
     border-color: rgba(120,200,140,0.6);
     background: rgba(120,200,140,0.18);
-    animation: copyPop 0.4s ease;
+    transition: color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+                background 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   }
-  @keyframes copyPop {
-    0%   { transform: scale(1); }
-    40%  { transform: scale(1.12); }
-    100% { transform: scale(1); }
+
+  /* Wraps the visible text inside upvote/copy buttons so JS can crossfade
+     it (fade out old label, swap the text, fade in new label) instead of
+     the text hard-cutting from one string to another mid-frame. */
+  .btn-label {
+    display: inline-block;
+    transition: opacity 0.12s cubic-bezier(0.4, 0, 0.2, 1);
   }
+  .btn-label.fading { opacity: 0; }
 
   /* Small muted "Copied by N" note that sits next to the Copy button.
      Empty (and so invisible, taking no space) until at least one person
@@ -740,7 +747,7 @@ app.get('/tent/:tentId', (req, res) => {
     position: fixed;
     left: 50%;
     bottom: 28px;
-    transform: translate(-50%, 16px);
+    transform: translate(-50%, 10px);
     background: rgba(20,20,24,0.92);
     color: #f0f0f2;
     border: 1px solid var(--accent-soft);
@@ -755,7 +762,10 @@ app.get('/tent/:tentId', (req, res) => {
     opacity: 0;
     pointer-events: none;         /* never blocks clicks, even while visible */
     z-index: 50;
-    transition: opacity 0.25s ease, transform 0.25s ease;
+    /* Same smooth, no-overshoot curve as everything else - quick in,
+       slightly slower out (people read the message before it leaves). */
+    transition: opacity 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
   }
   #toast.show {
     opacity: 1;
@@ -796,6 +806,9 @@ app.get('/tent/:tentId', (req, res) => {
     font-size: 14px;
     text-shadow: 0 1px 2px rgba(0,0,0,0.5);
     box-shadow: 0 4px 14px rgba(180,0,0,0.35);   /* red glow under the button */
+    transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+                filter 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .send-btn:hover {
     filter: brightness(1.12);                    /* slightly brighter on hover */
@@ -804,16 +817,12 @@ app.get('/tent/:tentId', (req, res) => {
   }
   .send-btn:active { transform: translateY(0); filter: brightness(0.95); }
 
-  /* Added briefly (via JS, then removed) right when a message is sent - a
-     quick outward ring burst confirming the click registered, independent
-     of the card animation that plays a moment later once the server
-     replies. */
-  .send-btn.sent-pulse { animation: sentPulse 0.35s ease; }
-  @keyframes sentPulse {
-    0%   { box-shadow: 0 4px 14px rgba(180,0,0,0.35), 0 0 0 0 rgba(255,80,80,0.55); }
-    60%  { box-shadow: 0 4px 14px rgba(180,0,0,0.35), 0 0 0 10px rgba(255,80,80,0); }
-    100% { box-shadow: 0 4px 14px rgba(180,0,0,0.35), 0 0 0 0 rgba(255,80,80,0); }
-  }
+  /* Added briefly (via JS, then removed) right when a message is sent.
+     Just a quick, subtle press-down-and-release - the same kind of tap
+     feedback Telegram's send button gives - rather than a visible ring
+     bursting outward. It rides on the SAME transition already defined
+     above, so the motion is smooth in both directions automatically. */
+  .send-btn.sent-pulse { transform: scale(0.94); }
 
   /* ---------------- MOBILE LAYOUT ----------------
      A media query applies rules only when a condition is true - here, when
@@ -965,12 +974,12 @@ app.get('/tent/:tentId', (req, res) => {
       socket.emit('send-code', { tentId: tentId, code: code });
       codeInput.value = '';                  // clear the box for the next snippet
 
-      // Quick tactile "sent" pulse on the button itself: add the class,
-      // then remove it after the animation's duration so it can replay on
-      // the very next click (CSS animations do not restart while a class
-      // is already applied).
+      // Quick tactile "sent" pulse on the button itself: add the class
+      // (button scales down slightly), then remove it shortly after so it
+      // smoothly transitions back to full size - a quick press-and-release
+      // rather than a lingering effect.
       sendBtn.classList.add('sent-pulse');
-      setTimeout(function () { sendBtn.classList.remove('sent-pulse'); }, 350);
+      setTimeout(function () { sendBtn.classList.remove('sent-pulse'); }, 100);
     }
 
     // Clicking "Share" sends the message.
@@ -1048,12 +1057,16 @@ app.get('/tent/:tentId', (req, res) => {
       upvoteBtn.appendChild(document.createTextNode(')'));
       upvoteBtn.addEventListener('click', function () { upvote(msg.id); });
 
-      // "Copy Code" button (\u{1F4CB} is the clipboard emoji). We pass the
-      // button itself (not just the id) into copyCode so it can animate
-      // that exact button without having to search the page for it again.
+      // "Copy Code" button (\u{1F4CB} is the clipboard emoji). The visible
+      // text lives inside a nested <span class="btn-label"> so copyCode()
+      // can fade it out, swap it, and fade it back in (a crossfade) instead
+      // of the label hard-jumping between two strings.
       const copyBtn = document.createElement('button');
       copyBtn.className = 'copy-btn';
-      copyBtn.textContent = '\u{1F4CB} Copy Code';
+      const copyLabel = document.createElement('span');
+      copyLabel.className = 'btn-label';
+      copyLabel.textContent = '\u{1F4CB} Copy Code';
+      copyBtn.appendChild(copyLabel);
       copyBtn.addEventListener('click', function () { copyCode(msg.id, copyBtn); });
 
       // Small muted note showing how many different people have copied this
@@ -1100,6 +1113,22 @@ app.get('/tent/:tentId', (req, res) => {
     //
     // "btnEl" is the actual <button> element that was clicked, passed in
     // above so we do not need to search the page for it again.
+    //
+    // The label swap is a CROSSFADE, not an instant text change: fade the
+    // current label out (120ms), swap the text while it is invisible, then
+    // fade the new label back in. This small detail is a lot of why native
+    // app UI feels "smooth" - text never visibly snaps mid-frame.
+    function crossfadeLabel(btnEl, newText) {
+      const label = btnEl.querySelector('.btn-label');
+      if (!label) { btnEl.textContent = newText; return; }   // fallback if the span is missing for any reason
+
+      label.classList.add('fading');   // starts the 120ms fade-out (see .btn-label.fading in the CSS)
+      setTimeout(function () {
+        label.textContent = newText;       // swapped while fully invisible, so the change is never seen mid-fade
+        label.classList.remove('fading');  // starts the fade back in
+      }, 120);
+    }
+
     function copyCode(msgId, btnEl) {
       const el = document.getElementById('body-' + msgId);
       const text = el.textContent;
@@ -1109,8 +1138,10 @@ app.get('/tent/:tentId', (req, res) => {
       // rather than assuming it worked the instant we asked for it.
       navigator.clipboard.writeText(text).then(function () {
         if (btnEl) {
-          const originalLabel = btnEl.textContent;
-          btnEl.textContent = '\u{2705} Copied!';
+          const label = btnEl.querySelector('.btn-label');
+          const originalLabel = label ? label.textContent : btnEl.textContent;
+
+          crossfadeLabel(btnEl, '\u{2705} Copied!');
           btnEl.classList.add('copied');
 
           // If this same button is clicked again quickly, cancel the
@@ -1118,7 +1149,7 @@ app.get('/tent/:tentId', (req, res) => {
           // each other and leave the button stuck on the wrong label.
           if (btnEl._revertTimer) clearTimeout(btnEl._revertTimer);
           btnEl._revertTimer = setTimeout(function () {
-            btnEl.textContent = originalLabel;
+            crossfadeLabel(btnEl, originalLabel);
             btnEl.classList.remove('copied');
           }, 1300);
         }
