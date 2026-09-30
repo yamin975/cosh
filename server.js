@@ -706,6 +706,56 @@ app.get('/tent/:tentId', (req, res) => {
   .copy-btn { border-color: rgba(120,170,220,0.4); color: #a9cdf0; }     /* blue: copy */
   .copy-btn:hover { background: rgba(120,170,220,0.15); }
 
+  /* ---------------- REPLY FEATURE ---------------- */
+  /* Amber "Reply" button on each card. */
+  .reply-btn { border-color: rgba(220,180,120,0.4); color: #f0d4a0; }
+  .reply-btn:hover { background: rgba(220,180,120,0.15); }
+
+  /* The quoted snippet shown at the top of a reply card. Clicking it jumps
+     to the original message. Capped in height so a long quote stays compact. */
+  .quote-block {
+    border-left: 3px solid var(--accent2);
+    background: rgba(255,255,255,0.05);
+    padding: 8px 10px;
+    border-radius: calc(var(--radius) - 6px);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #a8a8b2;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 72px;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .quote-block:hover { background: rgba(255,255,255,0.08); }
+
+  /* The "Replying to ..." bar that appears above the input box while a
+     reply is being written. Hidden until the .show class is added. */
+  #reply-preview {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    border-left: 3px solid var(--accent2);
+    background: rgba(255,255,255,0.05);
+    border-radius: calc(var(--radius) - 4px);
+    font-size: 12px;
+    color: #a8a8b2;
+  }
+  #reply-preview.show { display: flex; }
+  #reply-preview .rp-text {
+    flex: 1;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #reply-preview button { padding: 2px 8px; }
+
+  /* Brief highlight ring on the original message after tapping a quote. */
+  .msg-card.flash { box-shadow: 0 0 0 2px var(--accent2); transition: box-shadow 0.3s ease; }
+
   /* Momentary "copied" state: color/border smoothly TRANSITION to green
      (no keyframe pop, no scale bump) - just a quick, quiet color change,
      the same kind of feedback you get tapping a reaction in Telegram. The
@@ -857,6 +907,13 @@ app.get('/tent/:tentId', (req, res) => {
   <!-- ================= MESSAGE LIST (starts empty; JS adds cards) ================= -->
   <div id="chat-window"></div>
 
+  <!-- ================= REPLY PREVIEW (hidden until Reply is tapped) ================= -->
+  <div id="reply-preview">
+    <span>&#8617; Replying to</span>
+    <span class="rp-text" id="replyText"></span>
+    <button id="cancelReplyBtn" title="Cancel reply">&#10005;</button>
+  </div>
+
   <!-- ================= INPUT BAR ================= -->
   <div class="input-area">
     <textarea id="codeInput" placeholder="Your Code"></textarea>
@@ -966,13 +1023,55 @@ app.get('/tent/:tentId', (req, res) => {
       statusEl.classList.add('disconnected');
     });
 
+    // ---------------------- REPLYING ----------------------
+    // replyingTo holds the id of the message the user is currently replying
+    // to, or null when they are not replying to anything.
+    let replyingTo = null;
+
+    const replyPreview = document.getElementById('reply-preview');
+    const replyText = document.getElementById('replyText');
+
+    // Called when a card's Reply button is tapped: remember which message,
+    // show a one-line preview above the input, and focus the input.
+    function setReply(msgId) {
+      const text = document.getElementById('body-' + msgId).textContent;
+      replyingTo = msgId;
+      replyText.textContent = text.replace(/\s+/g, ' ').slice(0, 120);   // collapse whitespace so it fits on one line
+      replyPreview.classList.add('show');
+      codeInput.focus();
+    }
+
+    // Cancels the reply (X button, Escape key, or after sending).
+    function clearReply() {
+      replyingTo = null;
+      replyPreview.classList.remove('show');
+    }
+
+    document.getElementById('cancelReplyBtn').addEventListener('click', clearReply);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') clearReply();
+    });
+
+    // Scrolls to the original message and briefly highlights it. Does
+    // nothing if that card is not on screen.
+    function jumpToMessage(msgId) {
+      const target = document.getElementById('msg-' + msgId);
+      if (!target) return;
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.classList.add('flash');
+      setTimeout(function () { target.classList.remove('flash'); }, 1200);
+    }
+
     // ---------------------- SENDING CODE ----------------------
     function sendMessage() {
       const code = codeInput.value.trim();   // trim() removes spaces/newlines at both ends
       if (!code) return;                     // empty box -> do nothing
       // Send the code to the server (it will broadcast it back to everyone).
-      socket.emit('send-code', { tentId: tentId, code: code });
+      // replyTo is just an ID; the server looks up the real text itself, so
+      // nobody can fake what a quote says.
+      socket.emit('send-code', { tentId: tentId, code: code, replyTo: replyingTo });
       codeInput.value = '';                  // clear the box for the next snippet
+      clearReply();
 
       // Quick tactile "sent" pulse on the button itself: add the class
       // (button scales down slightly), then remove it shortly after so it
@@ -1033,13 +1132,23 @@ app.get('/tent/:tentId', (req, res) => {
       metaSpan.textContent = 'Shared at ' + localTimeStr;
       meta.appendChild(metaSpan);
 
+      // If this message is a reply, build the quoted snippet of the original.
+      // Clicking it scrolls to (and highlights) the original card.
+      let quoteEl = null;
+      if (msg.replyTo) {
+        quoteEl = document.createElement('div');
+        quoteEl.className = 'quote-block';
+        quoteEl.textContent = msg.replyTo.excerpt;
+        quoteEl.addEventListener('click', function () { jumpToMessage(msg.replyTo.id); });
+      }
+
       // The code itself.
       const body = document.createElement('div');
       body.className = 'msg-body';
       body.id = 'body-' + msg.id;      // used by the Copy button to find the text
       body.textContent = msg.code;
 
-      // Row holding the two buttons.
+      // Row holding the buttons.
       const actions = document.createElement('div');
       actions.className = 'msg-actions';
 
@@ -1069,6 +1178,13 @@ app.get('/tent/:tentId', (req, res) => {
       copyBtn.appendChild(copyLabel);
       copyBtn.addEventListener('click', function () { copyCode(msg.id, copyBtn); });
 
+      // "Reply" button (\u{21A9} is the return-arrow symbol). Starts a reply
+      // to this message; see setReply() above.
+      const replyBtn = document.createElement('button');
+      replyBtn.className = 'reply-btn';
+      replyBtn.textContent = '\u{21A9} Reply';
+      replyBtn.addEventListener('click', function () { setReply(msg.id); });
+
       // Small muted note showing how many different people have copied this
       // snippet so far, e.g. "Copied by 3". Kept as its OWN element (rather
       // than inside copyBtn) so it is unaffected when the button's own label
@@ -1081,9 +1197,11 @@ app.get('/tent/:tentId', (req, res) => {
       // Assemble the pieces like Lego: buttons -> actions row -> card -> page.
       actions.appendChild(upvoteBtn);
       actions.appendChild(copyBtn);
+      actions.appendChild(replyBtn);
       actions.appendChild(copyCountEl);
 
       card.appendChild(meta);
+      if (quoteEl) card.appendChild(quoteEl);   // quote (if any) sits above the code
       card.appendChild(body);
       card.appendChild(actions);
       chatWindow.appendChild(card);   // finally put the card on screen
@@ -1218,13 +1336,30 @@ io.on('connection', (socket) => {
             database[tentId] = { messages: [], lastActive: Date.now() };
         }
 
+        // If this is a reply, the browser only sends the ID of the original
+        // message. We look up the real text ON THE SERVER, so nobody can fake
+        // what a quote says. An unknown or invalid ID is simply ignored and
+        // the message is sent as a normal (non-reply) one.
+        let replyTo = null;
+        if (typeof data.replyTo === 'string') {
+            const original = database[tentId].messages.find((m) => m.id === data.replyTo);
+            if (original) {
+                replyTo = {
+                    id: original.id,
+                    // Keep only the first 200 characters so quotes stay small.
+                    excerpt: original.code.length > 200 ? original.code.slice(0, 200) + '…' : original.code
+                };
+            }
+        }
+
         // Build the message object that will be stored and shown.
         const newMsg = {
             id: crypto.randomBytes(6).toString('hex'),   // unique ID (used by the browser to find this card)
             code: data.code,
             timestamp: Date.now(),
             upvotes: 0,
-            copies: 0            // how many DIFFERENT users have copied this snippet so far
+            copies: 0,           // how many DIFFERENT users have copied this snippet so far
+            replyTo: replyTo     // null, or { id, excerpt } of the message being replied to
         };
 
         // Save it, then remember the Tent was just used.
